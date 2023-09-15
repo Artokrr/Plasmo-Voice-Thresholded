@@ -4,6 +4,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.sun.jna.Platform;
 import lombok.Setter;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -51,6 +54,7 @@ public final class VoiceAudioCapture implements AudioCapture {
     private final DeviceManager devices;
     private final ClientActivationManager activations;
     private final VoiceClientConfig config;
+    private static final double MAX_LOUDNESS_DB = 70;
 
     private final Set<UUID> activationStreams = Sets.newHashSet();
     private final Map<UUID, Long> activationSequenceNumbers = Maps.newHashMap();
@@ -325,10 +329,17 @@ public final class VoiceAudioCapture implements AudioCapture {
                                    @NotNull EncodedCapture encoded) {
         boolean isStereo = config.getVoice().getStereoCapture().value() && activation.isStereoSupported();
 
+
         if (result.isActivated() && samples != null) {
+            LocalPlayer player = Minecraft.getInstance().player;
+            short[] samplesCopy = Arrays.copyOf(samples, samples.length);
+            short[] samplesLimited = AudioUtil.limitLoudnessDb(samplesCopy, MAX_LOUDNESS_DB);
+            double loudnessDb = AudioUtil.measureLoudnessDb(samples);
+            /*player.sendSystemMessage(Component.literal("BEFORE: " + loudnessDb));
+            player.sendSystemMessage(Component.literal("AFTER: " + AudioUtil.measureLoudnessDb(samplesLimited)));*/
             if (isStereo && encoded.stereo == null) {
-                short[] processedSamples = new short[samples.length];
-                System.arraycopy(samples, 0, processedSamples, 0, samples.length);
+                short[] processedSamples = new short[samplesLimited.length];
+                System.arraycopy(samplesLimited, 0, processedSamples, 0, samplesLimited.length);
 
                 AudioEncoder stereoEncoder = activation.getStereoEncoder().orElse(this.stereoEncoder);
 
@@ -339,9 +350,8 @@ public final class VoiceAudioCapture implements AudioCapture {
                 encoded.stereoProcessed = processedSamples;
                 encoded.stereo = encode(stereoEncoder, processedSamples);
             } else if (!isStereo && encoded.mono == null) {
-                short[] processedSamples = new short[samples.length];
-                System.arraycopy(samples, 0, processedSamples, 0, samples.length);
-
+                short[] processedSamples = new short[samplesLimited.length];
+                System.arraycopy(samplesLimited, 0, processedSamples, 0, samplesLimited.length);
                 AudioEncoder monoEncoder = activation.getMonoEncoder().orElse(this.monoEncoder);
 
                 processedSamples = device.processFilters(processedSamples);

@@ -320,6 +320,49 @@ public final class AudioUtil {
         return (float) Math.exp(-1.0f / (sampleRate * time));
     }
 
+    public static double measureLoudnessDb(short[] samples) {
+        double rms = 0;
+
+        for(short sample : samples) {
+            rms += sample * sample;
+        }
+
+        rms = Math.sqrt(rms / samples.length);
+
+        return 20 * Math.log10(rms);
+    }
+
+    public static short[] normalizeLoudnessDb(short[] samples, double targetDb) {
+
+        double currentDb = measureLoudnessDb(samples);
+        double gain = Math.pow(10, (targetDb - currentDb) / 20);
+
+        for(int i = 0; i < samples.length; i++) {
+            double temp = samples[i] * gain;
+            if(temp > Short.MAX_VALUE) {
+                samples[i] = Short.MAX_VALUE;
+            } else if(temp < Short.MIN_VALUE) {
+                samples[i] = Short.MIN_VALUE;
+            } else {
+                samples[i] = (short) temp;
+            }
+        }
+
+        return samples;
+    }
+
+    public static short[] limitLoudnessDb(short[] samples, double maxDb) {
+
+        double currentDb = measureLoudnessDb(samples);
+
+        if(currentDb > maxDb) {
+            return normalizeLoudnessDb(samples, maxDb);
+        }
+
+        return samples;
+    }
+
+
     private AudioUtil() {
     }
 }
